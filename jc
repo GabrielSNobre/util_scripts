@@ -2,6 +2,22 @@
 
 SRC_DIR="src"
 OUT_DIR="bin"
+LIB_DIR="lib"
+
+# Function to build classpath with lib directory
+build_classpath() {
+    CLASSPATH="$OUT_DIR"
+    
+    if [ -d "$LIB_DIR" ]; then
+        for jar in "$LIB_DIR"/*.jar; do
+            if [ -f "$jar" ]; then
+                CLASSPATH="$CLASSPATH:$jar"
+            fi
+        done
+    fi
+    
+    echo "$CLASSPATH"
+}
 
 find_main_class() {
     MAIN_FILE=$(find "$SRC_DIR" -name "*.java" -exec grep -l "public static void main" {} \; | head -1)
@@ -18,7 +34,28 @@ find_main_class() {
 compile(){
     echo "Compiling..."
     mkdir -p "$OUT_DIR"
-    javac -d "$OUT_DIR" $(find "$SRC_DIR" -name "*.java")
+    
+    # Build classpath for compilation
+    CP=""
+    if [ -d "$LIB_DIR" ]; then
+        for jar in "$LIB_DIR"/*.jar; do
+            if [ -f "$jar" ]; then
+                if [ -z "$CP" ]; then
+                    CP="$jar"
+                else
+                    CP="$CP:$jar"
+                fi
+            fi
+        done
+    fi
+    
+    # Compile with classpath if libraries exist
+    if [ -n "$CP" ]; then
+        echo "Using libraries from $LIB_DIR"
+        javac -cp "$CP" -d "$OUT_DIR" $(find "$SRC_DIR" -name "*.java")
+    else
+        javac -d "$OUT_DIR" $(find "$SRC_DIR" -name "*.java")
+    fi
     
     if [ $? -eq 0 ]; then
         echo "Compilation successful!"
@@ -36,7 +73,8 @@ case "$1" in
         MAIN_CLASS=$(find_main_class)
         if [ -n "$MAIN_CLASS" ]; then
             echo "Running: $MAIN_CLASS"
-            java -cp "$OUT_DIR" "$MAIN_CLASS"
+            CLASSPATH=$(build_classpath)
+            java -cp "$CLASSPATH" "$MAIN_CLASS"
         fi
         ;;
     clean | -c)
@@ -51,6 +89,11 @@ case "$1" in
         echo "  run     | -r     - Run the main class"
         echo "  build   | -b     - Compile the project"
         echo "  clean   | -c     - Clean the bin directory"
+        echo ""
+        echo "Project structure:"
+        echo "  src/     - Java source files"
+        echo "  bin/     - Compiled classes"
+        echo "  lib/     - External JAR dependencies (e.g., mariadb connector)"
         ;;
     *)
         echo "Unknown argument: $1"
